@@ -1,5 +1,18 @@
 #include "filter.hpp"
 
+
+IIRFilter::IIRFilter(const float poles[], const int poleCount, const float zeros[], const int zeroCount) :
+	m_poles(poles, poles + poleCount),
+	m_zeros(zeros, zeros + zeroCount),
+	m_yHistory(poleCount, 0.0f),
+	m_xHistory(zeroCount, 0.0f) {}
+
+float IIRFilter::Update(const float x)
+{
+	return 0.0f;
+}
+
+
 ConvolutionalFilter::ConvolutionalFilter(const float filterTaps[], const int tapsCount) :
 	m_history(tapsCount, 0.0f),
 	m_filterTaps(filterTaps, filterTaps + tapsCount) {}

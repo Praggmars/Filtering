@@ -1,6 +1,17 @@
 #include "application.hpp"
 #include <cmath>
 
+
+void Application::PlotMoverMouseMove(int2 cursor, int2 delta, WPARAM flags)
+{
+	if ((MK_LBUTTON | MK_RBUTTON) & flags)
+	{
+		m_signalTransform.offset.x -= static_cast<float>(delta.x) / static_cast<float>(m_resolution.x - 1) * m_signalTransform.scaler.x / 0.6f;
+		m_signalTransform.offset.y += static_cast<float>(delta.y) / static_cast<float>(m_resolution.y - 6) * 2.0f * m_signalTransform.scaler.y;
+		AskRedraw();
+	}
+}
+
 void Application::AskRedraw() const
 {
 	InvalidateRect(m_mainWindow, nullptr, false);
@@ -11,41 +22,107 @@ void Application::MouseMove(int x, int y, WPARAM flags)
 	const int2 cursor{ x, y };
 	const int2 delta = cursor - m_prevCursor;
 
-	if ((MK_LBUTTON | MK_RBUTTON)& flags)
-	{
-		m_signalTransform.offset.x -= static_cast<float>(delta.x) / static_cast<float>(m_resolution.x - 1) * m_signalTransform.scaler.x;
-		m_signalTransform.offset.y += static_cast<float>(delta.y) / static_cast<float>(m_resolution.y - 6) * 2.0f * m_signalTransform.scaler.y;
-		AskRedraw();
-	}
+	if (m_MouseMoveHandler)
+		(this->*m_MouseMoveHandler)(cursor, delta, flags);
 
 	m_prevCursor = cursor;
 }
 
 void Application::MouseWheel(int delta, WPARAM flags)
 {
-	float scale = 1.25f;
-	if (delta > 0)
-		scale = 1.0f / scale;
-
-	if (MK_RBUTTON & flags)
+	if (m_prevCursor.x < m_resolution.x * 6 / 10)
 	{
-		const float2 srcSect = m_prevCursor.y < (m_resolution.y / 2) ?
-			float2{ 0.0f, static_cast<float>(m_resolution.y - 6) * 0.5f } :
-			float2{ static_cast<float>(m_resolution.y + 4) * 0.5f, static_cast<float>(m_resolution.y - 1) };
-		const float cy = Transform<float>(srcSect.x, srcSect.y, 1.0f, 0.0f).Forward(static_cast<float>(m_prevCursor.y));
-		const float cs = m_signalTransform.Forward({ 0.0f, cy }).y;
-		m_signalTransform.scaler.y *= scale;
-		m_signalTransform.offset.y = cs - (cy * m_signalTransform.scaler.y);
+		float scale = 1.25f;
+		if (delta > 0)
+			scale = 1.0f / scale;
+
+		if (MK_RBUTTON & flags)
+		{
+			const float2 srcSect = m_prevCursor.y < (m_resolution.y / 2) ?
+				float2{ 0.0f, static_cast<float>(m_resolution.y - 6) * 0.5f } :
+				float2{ static_cast<float>(m_resolution.y + 4) * 0.5f, static_cast<float>(m_resolution.y - 1) };
+			const float cy = Transform<float>(srcSect.x, srcSect.y, 1.0f, 0.0f).Forward(static_cast<float>(m_prevCursor.y));
+			const float cs = m_signalTransform.Forward({ 0.0f, cy }).y;
+			m_signalTransform.scaler.y *= scale;
+			m_signalTransform.offset.y = cs - (cy * m_signalTransform.scaler.y);
+		}
+		else
+		{
+			const float cx = static_cast<float>(m_prevCursor.x) / (static_cast<float>(m_resolution.x - 1) * 0.6f);
+			const float cs = m_signalTransform.Forward({ cx, 0.0f }).x;
+			m_signalTransform.scaler.x *= scale;
+			m_signalTransform.offset.x = cs - (cx * m_signalTransform.scaler.x);
+		}
+
+		AskRedraw();
 	}
-	else
+}
+
+void Application::LButtonDown(int x, int y, WPARAM flags)
+{
+	if (!m_mouseFlags)
 	{
-		const float cx = static_cast<float>(m_prevCursor.x) / static_cast<float>(m_resolution.x - 1);
-		const float cs = m_signalTransform.Forward({ cx, 0.0f }).x;
-		m_signalTransform.scaler.x *= scale;
-		m_signalTransform.offset.x = cs - (cx * m_signalTransform.scaler.x);
+		SetCapture(m_mainWindow);
+		if (x < m_resolution.x * 3 / 5)
+			m_MouseMoveHandler = &Application::PlotMoverMouseMove;
 	}
 
-	AskRedraw();
+	m_mouseFlags |= MK_LBUTTON;
+}
+
+void Application::MButtonDown(int x, int y, WPARAM flags)
+{
+	if (!m_mouseFlags)
+	{
+		SetCapture(m_mainWindow);
+		if (x < m_resolution.x * 3 / 5)
+			m_MouseMoveHandler = &Application::PlotMoverMouseMove;
+	}
+
+	m_mouseFlags |= MK_MBUTTON;
+
+}
+
+void Application::RButtonDown(int x, int y, WPARAM flags)
+{
+	if (!m_mouseFlags)
+	{
+		SetCapture(m_mainWindow);
+		if (x < m_resolution.x * 3 / 5)
+			m_MouseMoveHandler = &Application::PlotMoverMouseMove;
+	}
+
+	m_mouseFlags |= MK_RBUTTON;
+}
+
+void Application::LButtonUp(int x, int y, WPARAM flags)
+{
+	m_mouseFlags &= ~MK_LBUTTON;
+	if (!m_mouseFlags)
+	{
+		ReleaseCapture();
+		m_MouseMoveHandler = nullptr;
+	}
+}
+
+void Application::MButtonUp(int x, int y, WPARAM flags)
+{
+	m_mouseFlags &= ~MK_MBUTTON;
+	if (!m_mouseFlags)
+	{
+		ReleaseCapture();
+		m_MouseMoveHandler = nullptr;
+	}
+}
+
+void Application::RButtonUp(int x, int y, WPARAM flags)
+{
+	m_mouseFlags &= ~MK_RBUTTON;
+	if (!m_mouseFlags)
+	{
+		ReleaseCapture();
+		m_MouseMoveHandler = nullptr;
+	}
 }
 
 void Application::Resize(int width, int height)
@@ -65,11 +142,11 @@ void Application::Paint() const
 
 	m_graphics.BeginDraw();
 
-	signalDataBuffer.rectTransform = Transform<float2>({ 0.0f, 1.0f }, { 1.0f, 0.0f }, { -1.0f, 1.0f }, { 1.0f, 2.5f / static_cast<float>(m_resolution.y) });
+	signalDataBuffer.rectTransform = Transform<float2>({ 0.0f, 1.0f }, { 1.0f, 0.0f }, { -1.0f, 1.0f }, { 0.2f, 2.5f / static_cast<float>(m_resolution.y) });
 	signalDataBuffer.samplingStep = samplingStepBase / signalDataBuffer.rectTransform.scaler;
 	m_graphics.RenderFunc(signalDataBuffer, m_signalProvider.InputSignal().data(), m_signalProvider.InputSignal().size());
 
-	signalDataBuffer.rectTransform = Transform<float2>({ 0.0f, 1.0f }, { 1.0f, 0.0f }, { -1.0f, -2.5f / static_cast<float>(m_resolution.y) }, { 1.0f, -1.0f });
+	signalDataBuffer.rectTransform = Transform<float2>({ 0.0f, 1.0f }, { 1.0f, 0.0f }, { -1.0f, -2.5f / static_cast<float>(m_resolution.y) }, { 0.2f, -1.0f });
 	signalDataBuffer.samplingStep = samplingStepBase / signalDataBuffer.rectTransform.scaler;
 	m_graphics.RenderFunc(signalDataBuffer, m_signalProvider.OutputSignal().data(), m_signalProvider.OutputSignal().size());
 
@@ -79,7 +156,10 @@ void Application::Paint() const
 	ValidateRect(m_mainWindow, nullptr);
 }
 
-Application::Application() : m_mainWindow{} {}
+Application::Application() : 
+	m_mainWindow{},
+	m_mouseFlags{},
+	m_MouseMoveHandler{} {}
 
 void Application::Init(const wchar_t* title, int width, int height)
 {
@@ -126,6 +206,24 @@ LRESULT Application::MessageHandler(UINT msg, WPARAM wParam, LPARAM lParam)
 		return 0;
 	case WM_MOUSEWHEEL:
 		MouseWheel(GET_WHEEL_DELTA_WPARAM(wParam), wParam);
+		return 0;
+	case WM_LBUTTONDOWN:
+		LButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), wParam);
+		return 0;
+	case WM_MBUTTONDOWN:
+		MButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), wParam);
+		return 0;
+	case WM_RBUTTONDOWN:
+		RButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), wParam);
+		return 0;
+	case WM_LBUTTONUP:
+		LButtonUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), wParam);
+		return 0;
+	case WM_MBUTTONUP:
+		MButtonUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), wParam);
+		return 0;
+	case WM_RBUTTONUP:
+		RButtonUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), wParam);
 		return 0;
 	case WM_PAINT:
 		Paint();
